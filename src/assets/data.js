@@ -241,7 +241,19 @@ export const chartData = {
       selectedPalette: 'divergentAscending',
       // colors: ['#6754A4', '#219679ff', '#FFB400ff'],
       unitTooltip: 'millions',
-    }
+    },
+  },
+  smartScalar: {
+    default: {
+      value: 12345,
+      previousValue: 11800,
+      unit: 'week',
+      periodStart: '2025-11-17',
+      prefix: '',
+      suffix: '',
+      trendingLabel: 'semaine dernière',
+      compactPrimaryNumber: true,
+    },
   },
   dataBox: {
     simple: {
