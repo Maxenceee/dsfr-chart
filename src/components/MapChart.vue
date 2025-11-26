@@ -8,10 +8,7 @@
       :ref="widgetId"
       class="widget_container fr-grid-row"
     >
-      <MapInfo
-        v-if="!noMapInfo"
-        :data="InfoProps"
-      />
+      <MapInfo :data="InfoProps" />
       <div class="fr-col-12 fr-col-lg-9 align-stretch">
         <button
           v-if="zoomDep"
@@ -260,6 +257,7 @@ export default {
         value: 0,
         valueNat: 0,
         date: '',
+        noMapInfo: false,
       },
       FranceProps: {
         viewBox: '0 0 1010 1010',
@@ -464,6 +462,7 @@ export default {
       this.InfoProps.max = this.scaleMax;
       this.InfoProps.colorMin = this.colorLeft;
       this.InfoProps.colorMax = this.colorRight;
+      this.InfoProps.noMapInfo = this.noMapInfo;
     },
     displayTooltip(e) {
       if (isMobile()) return;

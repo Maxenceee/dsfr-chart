@@ -21,7 +21,7 @@
         {{ formatNumber(data['value']) }}
       </p>
     </div>
-    <div>
+    <div v-if="!data['noMapInfo']">
       <p
         class="fr-text--xs fr-mb-1v"
         :style="{ color: data['textMention'] }"

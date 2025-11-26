@@ -8,10 +8,7 @@
       :ref="widgetId"
       class="widget_container fr-grid-row"
     >
-      <MapInfo
-        v-if="!noMapInfo"
-        :data="InfoProps"
-      />
+      <MapInfo :data="InfoProps" />
       <div class="fr-col-12 fr-col-lg-9 align-stretch">
         <button
           v-if="zoomDep"
@@ -133,6 +130,7 @@ export default {
         value: 0,
         valueReg: 0,
         date: '',
+        noMapInfo: false,
       },
       FranceProps: {
         viewBox: '0 0 1010 1010',
@@ -285,6 +283,7 @@ export default {
       this.InfoProps.valueReg = this.dataParse[this.zoomDep];
       this.InfoProps.min = this.scaleMin;
       this.InfoProps.max = this.scaleMax;
+      this.InfoProps.noMapInfo = this.noMapInfo;
     },
     choosePalette() {
       // Using the refactored choosePalette function from utils
