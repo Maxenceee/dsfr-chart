@@ -234,6 +234,10 @@ export default {
       default: 'top', // 'top' | 'middle' | 'bottom'
       validator: (v) => ['top', 'middle', 'bottom'].includes(v)
     },
+    forceXOrder: {
+      type: Boolean,
+      default: false
+    },
   },
   data() {
     this.chart = undefined;
@@ -416,23 +420,33 @@ export default {
       // Cas où x est numérique
       if (typeof this.xparse[0][0] === 'number') {
         const allX = [];
-        this.xparse.forEach((x, i) => {
-          const dj = [];
-          const xsort = x.map((a) => a).sort((a, b) => a - b);
-          xsort.forEach((k) => {
-            const index = x.findIndex((element) => element === k);
-            dj.push({
-              x: k,
-              y: this.yparse[i][index],
+
+        // Si forceXOrder est activé, on utilise le mode 'category' pour préserver l'ordre
+        if (this.forceXOrder) {
+          // Convertir les valeurs numériques en labels de catégories
+          this.labels = this.xparse[0].map(x => String(x));
+          data = this.yparse;
+          this.xAxisType = 'category';
+        } else {
+          // Mode normal: tri et axes linéaires
+          this.xparse.forEach((x, i) => {
+            const dj = [];
+            const xsort = x.map((a) => a).sort((a, b) => a - b);
+            xsort.forEach((k) => {
+              const index = x.findIndex((element) => element === k);
+              dj.push({
+                x: k,
+                y: this.yparse[i][index],
+              });
+              if (!allX.includes(k)) {
+                allX.push(k);
+              }
             });
-            if (!allX.includes(k)) {
-              allX.push(k);
-            }
+            data.push(dj);
           });
-          data.push(dj);
-        });
-        this.labels = [];
-        this.xAxisType = 'linear';
+          this.labels = [];
+          this.xAxisType = 'linear';
+        }
       } else {
         // Cas où x est non numérique
         data = this.yparse;
