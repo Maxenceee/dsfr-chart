@@ -8,7 +8,10 @@
       :ref="widgetId"
       class="widget_container fr-grid-row"
     >
-      <MapInfo :data="InfoProps" />
+      <MapInfo
+        v-if="!noMapInfo"
+        :data="InfoProps"
+      />
       <div class="fr-col-12 fr-col-lg-9 align-stretch">
         <button
           v-if="zoomDep"
@@ -105,6 +108,10 @@ export default {
     colors: {
       type: Array,
       default: undefined,
+    },
+    noMapInfo: {
+      type: Boolean,
+      default: false,
     },
   },
   data() {
