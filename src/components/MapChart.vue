@@ -177,6 +177,7 @@
 
 <script>
 import * as d3 from 'd3-scale';
+import { interpolateRgb } from 'd3-interpolate';
 import MapInfo from '@/components/MapInfo.vue';
 import maps from '@/components/maps';
 import { mapMixins, isMobile } from '@/utils/global.js';
@@ -234,6 +235,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    minimalMapInfo: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {
@@ -256,8 +261,10 @@ export default {
         colorMax: '',
         value: 0,
         valueNat: 0,
+        valueReg: 0,
         date: '',
         noMapInfo: false,
+        minimalMapInfo: false,
       },
       FranceProps: {
         viewBox: '0 0 1010 1010',
@@ -331,14 +338,19 @@ export default {
       this.InfoProps.colorMin = this.colorLeft;
       this.InfoProps.colorMax = this.colorRight;
       this.InfoProps.date = this.date;
-      this.InfoProps.names = this.name;
+      // Assurer un format cohérent pour MapInfo
+      this.InfoProps.names = Array.isArray(this.name) ? this.name : [this.name];
 
+      // Toujours utiliser TOUTES les valeurs pour l'échelle
       const values = [];
-      let listDep = [];
+      for (const key in this.dataParse) {
+        values.push(this.dataParse[key]);
+      }
 
+      let listDep = [];
       this.FranceProps.displayDep = {};
 
-      // Remplir la carte avec les départements/régions
+      // Déterminer quelles régions/départements afficher
       if (this.zoomDep) {
         if (this.isDep) {
           const region = this.getDep(this.zoomDep).region_value;
@@ -348,22 +360,24 @@ export default {
         } else if (this.isAcad) {
           listDep = [this.getAcad(this.zoomDep).value];
         }
-
-        for (const key of listDep) {
-          values.push(this.dataParse[key]);
-        }
-      } else {
-        for (const key in this.dataParse) {
-          values.push(this.dataParse[key]);
-        }
       }
 
       // Calcul des min et max pour l'échelle
-      this.scaleMin = Math.min(...values);
-      this.scaleMax = Math.max(...values);
+      const validValues = values.filter(v => v != null && !isNaN(Number(v)));
+      if (validValues.length === 0) {
+        this.scaleMin = 0;
+        this.scaleMax = 1;
+      } else {
+        this.scaleMin = Math.min(...validValues);
+        this.scaleMax = Math.max(...validValues);
+      }
 
-      // Define color scale based on regional values
-      const colorScale = d3.scaleLinear().domain([this.scaleMin, this.scaleMax]).range([this.colorLeft, this.colorRight]);
+      // Define color scale based on regional values (interpolation RGB pour éviter les couleurs invalides)
+      const colorScale = d3
+        .scaleLinear()
+        .domain([this.scaleMin, this.scaleMax])
+        .interpolate(interpolateRgb)
+        .range([this.colorLeft, this.colorRight]);
 
       let xmin = [],
         xmax = [],
@@ -376,19 +390,28 @@ export default {
         const elCol = parentWidget.getElementsByClassName(className);
 
         if (!this.zoomDep) {
-          elCol.length !== 0 && elCol[0].setAttribute('fill', colorScale(this.dataParse[key]));
+          if (elCol.length !== 0) {
+            const val = Number(this.dataParse[key]);
+            elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+          }
           this.FranceProps.displayDep[className] = '';
         } else {
-          const polygon = document.querySelector('.' + className).getBBox();
+          // Vérifier que l'élément existe dans le DOM avant de récupérer getBBox
+          if (elCol.length === 0) {
+            continue;
+          }
+
+          const polygon = elCol[0].getBBox();
           if (this.zoomDep === key) {
-            elCol.length !== 0 && elCol[0].setAttribute('fill', colorScale(this.dataParse[key]));
+            const val = Number(this.dataParse[key]);
+            elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
             xmax.push(polygon.x + polygon.width);
             ymax.push(polygon.y + polygon.height);
           } else if (listDep.includes(key)) {
-            elCol.length !== 0 && elCol[0].setAttribute('fill', this.colorLeft + 'B3');
+            elCol[0].setAttribute('fill', this.colorLeft + 'B3');
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
@@ -396,7 +419,7 @@ export default {
             ymax.push(polygon.y + polygon.height);
           } else {
             // Hide other departments outside the selected region
-            elCol.length !== 0 && elCol[0].setAttribute('fill', 'rgba(255, 255, 255, 0)');
+            elCol[0].setAttribute('fill', 'rgba(255, 255, 255, 0)');
             this.FranceProps.displayDep[className] = 'none';
           }
         }
@@ -420,7 +443,15 @@ export default {
           this.InfoProps.localisation = this.getAcad(this.zoomDep).academy;
         }
         this.InfoProps.value = this.value;
-        this.InfoProps.valueNat = this.dataParse[this.zoomDep];
+        const selectedVal = Number(this.dataParse[this.zoomDep]);
+        // Utiliser valueReg pour les régions, valueNat pour les départements
+        if (this.isReg) {
+          this.InfoProps.valueReg = isNaN(selectedVal) ? 0 : selectedVal;
+          this.InfoProps.valueNat = 0;
+        } else {
+          this.InfoProps.valueNat = isNaN(selectedVal) ? 0 : selectedVal;
+          this.InfoProps.valueReg = 0;
+        }
 
         if (this.isDep) {
           this.displayFrance = 'none';
@@ -448,6 +479,7 @@ export default {
         this.InfoProps.localisation = 'France';
         this.InfoProps.value = this.value;
         this.InfoProps.valueNat = 0;
+        this.InfoProps.valueReg = 0;
         this.FranceProps.viewBox = '0 0 1010 1010';
         this.displayFrance = '';
         this.displayGuadeloupe = '';
@@ -463,6 +495,7 @@ export default {
       this.InfoProps.colorMin = this.colorLeft;
       this.InfoProps.colorMax = this.colorRight;
       this.InfoProps.noMapInfo = this.noMapInfo;
+      this.InfoProps.minimalMapInfo = this.minimalMapInfo;
     },
     displayTooltip(e) {
       if (isMobile()) return;

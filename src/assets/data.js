@@ -251,7 +251,7 @@ export const chartData = {
       periodStart: '2025-11-17',
       prefix: '',
       suffix: '',
-      trendingLabel: 'semaine dernière',
+      trendingLabel: 'semaine précédente',
       compactPrimaryNumber: true,
     },
   },

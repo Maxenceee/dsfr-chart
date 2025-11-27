@@ -16,30 +16,36 @@
           type="button"
           :aria-describedby="'tooltip-' + id"
           title="Informations complémentaires sur le graphique"
+          @click="toggleTooltip"
         >
           Informations complémentaires sur le graphique
         </button>
 
-        <div
+        <Teleport
           v-if="tooltipTitle || tooltipContent"
-          :id="'tooltip-' + id"
-          class="fr-tooltip fr-placement"
-          role="tooltip"
-          aria-hidden="true"
+          to="body"
         >
-          <p
-            v-if="tooltipTitle"
-            class="fr-text--xs fr-mb-0 fr-text--bold"
+          <div
+            v-if="tooltipTitle || tooltipContent"
+            :id="'tooltip-' + id"
+            class="fr-tooltip fr-placement"
+            role="tooltip"
+            aria-hidden="true"
           >
-            {{ tooltipTitle }}
-          </p>
-          <p
-            v-if="tooltipContent"
-            class="fr-text--xs fr-mb-0"
-          >
-            {{ tooltipContent }}
-          </p>
-        </div>
+            <p
+              v-if="tooltipTitle"
+              class="fr-text--xs fr-mb-0 fr-text--bold"
+            >
+              {{ tooltipTitle }}
+            </p>
+            <p
+              v-if="tooltipContent"
+              class="fr-text--xs fr-mb-0"
+            >
+              {{ tooltipContent }}
+            </p>
+          </div>
+        </Teleport>
 
         <!-- Modal -->
         <button
@@ -286,7 +292,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { toPng } from 'html-to-image';
 import { slugify } from '@/utils/global.js';
 import DialogModal from '@/components/DialogModal.vue';
@@ -384,9 +390,62 @@ const actions = computed(() => (typeof props.actions === 'string' ? JSON.parse(p
 
 const selectedView = ref(chartSources.value.length > 0 ? 'chart' : 'table');
 
+const tooltipState = ref('deactivate');
+
 const changeView = (view) => {
   selectedView.value = view;
 };
+
+const toggleTooltip = (event) => {
+  event.stopPropagation();
+
+  if (tooltipState.value === 'activate') {
+    tooltipState.value = 'deactivate';
+    // Safely remove all fr-tooltip--shown classes
+    try {
+      const tooltips = document.querySelectorAll('.fr-tooltip--shown');
+      tooltips.forEach((tooltip) => {
+        tooltip.classList.remove('fr-tooltip--shown');
+      });
+    } catch (error) {
+      console.warn('Error removing tooltip classes:', error);
+    }
+  } else {
+    tooltipState.value = 'activate';
+    // Show the clicked tooltip
+    try {
+      const tooltip = document.getElementById('tooltip-' + props.id);
+      if (tooltip) {
+        tooltip.classList.add('fr-tooltip--shown');
+      }
+    } catch (error) {
+      console.warn('Error showing tooltip:', error);
+    }
+  }
+};
+
+const deactivateTooltips = () => {
+  tooltipState.value = 'deactivate';
+  // Safely remove all fr-tooltip--shown classes
+  try {
+    const tooltips = document.querySelectorAll('.fr-tooltip--shown');
+    tooltips.forEach((tooltip) => {
+      tooltip.classList.remove('fr-tooltip--shown');
+    });
+  } catch (error) {
+    console.warn('Error removing tooltip classes:', error);
+  }
+};
+
+onMounted(() => {
+  // Add global click listener to deactivate tooltips when clicking anywhere
+  document.addEventListener('click', deactivateTooltips);
+});
+
+onUnmounted(() => {
+  // Cleanup: remove global click listener
+  document.removeEventListener('click', deactivateTooltips);
+});
 
 const downloadCSV = (mode) => {
   const dom = document.querySelector(`[databox-id="${props.id}"][databox-type="${mode}"][databox-source="${currentSource.value}"]`);

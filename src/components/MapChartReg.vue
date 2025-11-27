@@ -53,6 +53,7 @@
 
 <script>
 import * as d3 from 'd3-scale';
+import { interpolateRgb } from 'd3-interpolate';
 import MapInfo from '@/components/MapInfo.vue';
 import maps from '@/components/maps';
 import { mapMixins, isMobile } from '@/utils/global.js';
@@ -197,7 +198,8 @@ export default {
       this.InfoProps.colorMin = this.colorLeft;
       this.InfoProps.colorMax = this.colorRight;
       this.InfoProps.date = this.date;
-      this.InfoProps.names = this.name;
+      // Assurer un format cohérent pour MapInfo
+      this.InfoProps.names = Array.isArray(this.name) ? this.name : [this.name];
 
       const values = [];
       let listDep = [];
@@ -207,15 +209,25 @@ export default {
       // Afficher uniquement les départements de la région sélectionnée
       listDep = this.getDepsFromReg(this.region);
       listDep.forEach((key) => {
-        values.push(this.dataParse[key]);
+        const v = Number(this.dataParse[key] ?? this.dataParse[this.region]);
+        if (!isNaN(v)) values.push(v);
       });
 
       // Calcul des min et max pour l'échelle
-      this.scaleMin = Math.min(...values);
-      this.scaleMax = Math.max(...values);
+      if (values.length === 0) {
+        this.scaleMin = 0;
+        this.scaleMax = 1;
+      } else {
+        this.scaleMin = Math.min(...values);
+        this.scaleMax = Math.max(...values);
+      }
 
-      // Define color scale based on regional values
-      const colorScale = d3.scaleLinear().domain([this.scaleMin, this.scaleMax]).range([this.colorLeft, this.colorRight]);
+      // Define color scale based on regional values (interpolation RGB pour éviter les couleurs invalides)
+      const colorScale = d3
+        .scaleLinear()
+        .domain([this.scaleMin, this.scaleMax])
+        .interpolate(interpolateRgb)
+        .range([this.colorLeft, this.colorRight]);
 
       let xmin = [],
         xmax = [],
@@ -227,7 +239,9 @@ export default {
         const className = 'FR-' + key;
         const elCol = parentWidget.getElementsByClassName(className);
 
-        elCol.length !== 0 && elCol[0].setAttribute('fill', 'rgba(255, 255, 255, 0)');
+        if (elCol.length !== 0) {
+          elCol[0].setAttribute('fill', 'rgba(255, 255, 255, 0)');
+        }
         this.FranceProps.displayDep[className] = 'none';
       }
       // Iterate over each department in the region and set colors
@@ -238,7 +252,10 @@ export default {
         if (!this.zoomDep) {
           if (listDep.includes(key)) {
             const polygon = elCol[0].getBBox();
-            elCol.length !== 0 && elCol[0].setAttribute('fill', colorScale(this.dataParse[key]));
+            if (elCol.length !== 0) {
+              const val = Number(this.dataParse[key] ?? this.dataParse[this.region]);
+              elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+            }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
@@ -248,7 +265,10 @@ export default {
         } else {
           if (this.zoomDep === key) {
             const polygon = elCol[0].getBBox();
-            elCol.length !== 0 && elCol[0].setAttribute('fill', colorScale(this.dataParse[key]));
+            if (elCol.length !== 0) {
+              const val = Number(this.dataParse[key] ?? this.dataParse[this.region]);
+              elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+            }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
@@ -256,7 +276,11 @@ export default {
             ymax.push(polygon.y + polygon.height);
           } else if (listDep.includes(key)) {
             const polygon = elCol[0].getBBox();
-            elCol.length !== 0 && elCol[0].setAttribute('fill', this.colorLeft + 'B3');
+            if (elCol.length !== 0) {
+              // Opacité sur la couleur minimale pour les départements non sélectionnés
+              elCol[0].setAttribute('fill', this.colorLeft);
+              elCol[0].style.opacity = '0.7';
+            }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
@@ -280,7 +304,9 @@ export default {
 
       this.InfoProps.localisation = this.getReg(this.region).department;
       this.InfoProps.value = this.value;
-      this.InfoProps.valueReg = this.dataParse[this.zoomDep];
+      // Valeur du département sélectionné (si disponible), sinon valeur régionale
+      const selectedVal = Number(this.dataParse[this.zoomDep] ?? this.dataParse[this.region]);
+      this.InfoProps.valueReg = isNaN(selectedVal) ? 0 : selectedVal;
       this.InfoProps.min = this.scaleMin;
       this.InfoProps.max = this.scaleMax;
       this.InfoProps.noMapInfo = this.noMapInfo;

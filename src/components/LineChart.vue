@@ -7,9 +7,13 @@
     <div
       :ref="widgetId"
       class="widget_container fr-grid-row"
+      :style="{ maxHeight: maxHeight || undefined }"
     >
       <div class="fr-col-12">
-        <div class="chart">
+        <div
+          class="chart"
+          :style="{ maxHeight: maxHeight || undefined, display: 'flex', flexDirection: 'column' }"
+        >
           <div class="tooltip">
             <div class="tooltip_header fr-text--sm fr-mb-0" />
             <div class="tooltip_body">
@@ -34,7 +38,10 @@
             </div>
           </div>
 
-          <canvas :ref="chartId" />
+          <canvas
+            :ref="chartId"
+            :style="{ maxHeight: maxHeight || undefined, flexShrink: maxHeight ? 1 : undefined }"
+          />
 
           <div class="chart_legend fr-mb-0 fr-mt-4v">
             <div
@@ -237,6 +244,10 @@ export default {
     forceXOrder: {
       type: Boolean,
       default: false
+    },
+    maxHeight: {
+      type: String,
+      default: ''
     },
   },
   data() {

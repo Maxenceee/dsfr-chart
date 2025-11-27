@@ -1,6 +1,6 @@
 <template>
   <div class="map_info fr-col-12 fr-col-lg-3">
-    <div v-if="data['valueNat'] || data['valueReg']">
+    <div v-if="(data['valueNat'] || data['valueReg']) && !data['noMapInfo'] && !data['minimalMapInfo']">
       <p
         class="fr-text--xs fr-mb-1v"
         :style="{ color: data['textMention'] }"
@@ -21,7 +21,7 @@
         {{ formatNumber(data['value']) }}
       </p>
     </div>
-    <div v-if="!data['noMapInfo']">
+    <div v-if="!data['minimalMapInfo'] || (data['valueNat'] || data['valueReg'])">
       <p
         class="fr-text--xs fr-mb-1v"
         :style="{ color: data['textMention'] }"
@@ -32,13 +32,24 @@
         <span>{{ data['localisation'] }}</span>
       </p>
       <p
+        v-if="!data['minimalMapInfo']"
         class="fr-text--xs fr-mb-1v"
         :style="{ color: data['textMention'] }"
       >
         Mise à jour : {{ data['date'] }}
       </p>
-      <p class="fr-text--sm fr-text--bold fr-mb-1v">
+      <p
+        v-if="!data['minimalMapInfo']"
+        class="fr-text--sm fr-text--bold fr-mb-1v"
+      >
         {{ data['names'] }}
+      </p>
+      <p
+        v-if="data['minimalMapInfo'] && (data['valueNat'] || data['valueReg'])"
+        class="fr-text--xs fr-mb-1v"
+        :style="{ color: data['textMention'] }"
+      >
+        Valeur
       </p>
       <p class="fr-text--md fr-text--bold fr-my-0">
         {{ formatNumber(data['valueNat'] || data['valueReg'] || data['value']) }}
