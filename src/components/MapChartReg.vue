@@ -8,14 +8,20 @@
       :ref="widgetId"
       class="widget_container fr-grid-row"
     >
-      <MapInfo :data="InfoProps" />
+      <MapInfo
+        :data="InfoProps"
+        :legend-alt="legendAlt"
+        :selected-palette="selectedPalette"
+        :current-palette="currentPalette"
+        @toggle-accessibility="toggleAccessibility"
+      />
       <div class="fr-col-12 fr-col-lg-9 align-stretch">
         <button
           v-if="zoomDep"
-          class="fr-btn fr-btn--sm fr-icon-arrow-go-back-fill fr-btn--icon-left fr-btn--tertiary-no-outline fr-ml-4w"
+          class="fr-btn fr-btn--sm fr-icon-close-line fr-btn--icon-left fr-btn--tertiary-no-outline fr-ml-4w"
           @click="resetGeoFilters"
         >
-          Retour
+          Déselectionner
         </button>
         <div class="map">
           <div
@@ -111,6 +117,22 @@ export default {
       type: Boolean,
       default: false,
     },
+    legendMaxValue: {
+      type: [Number, String],
+      default: undefined,
+    },
+    prefix: {
+      type: String,
+      default: '',
+    },
+    suffix: {
+      type: String,
+      default: '',
+    },
+    legendAlt: {
+      type: String,
+      default: 'Légende',
+    },
   },
   data() {
     return {
@@ -120,18 +142,28 @@ export default {
       scaleMax: 0,
       colorLeft: '',
       colorRight: '',
+      currentPalette: this.selectedPalette,
       zoomDep: '',
       InfoProps: {
         localisation: '',
         names: [],
         min: 0,
         max: 0,
+        maxLabel: '',
+        legendCap: undefined,
+        anyAboveCap: false,
         colorMin: '',
         colorMax: '',
         value: 0,
         valueReg: 0,
+        selectedValueRaw: undefined,
+        selectedValueCapped: undefined,
         date: '',
         noMapInfo: false,
+        hasNoData: false,
+        noDataColor: '#9e9e9e',
+        prefix: '',
+        suffix: '',
       },
       FranceProps: {
         viewBox: '0 0 1010 1010',
@@ -142,7 +174,7 @@ export default {
         top: '0px',
         left: '0px',
         visibility: 'hidden',
-        value: 0,
+        value: '',
         place: '',
       },
       displayFrance: '',
@@ -158,6 +190,10 @@ export default {
       handler() {
         // Check if the widget is already created to prevent useless re-renders
         if (this.widgetId) {
+          // sync internal palette if prop changed from outside
+          if (this.currentPalette !== this.selectedPalette) {
+            this.currentPalette = this.selectedPalette;
+          }
           this.createChart();
         }
       },
@@ -179,6 +215,26 @@ export default {
     });
   },
   methods: {
+    toNumber(val) {
+      if (val === null || val === undefined) return NaN;
+      if (typeof val === 'number') return val;
+      if (typeof val !== 'string') return Number(val);
+      const s = val.replace(/\s+/g, '').replace(',', '.');
+      const n = parseFloat(s);
+      return isNaN(n) ? NaN : n;
+    },
+    getValueForKey(code) {
+      if (Object.prototype.hasOwnProperty.call(this.dataParse, code)) return this.dataParse[code];
+      if (typeof code === 'string' && code.length === 2 && code.startsWith('0')) {
+        const k = code.slice(1);
+        if (Object.prototype.hasOwnProperty.call(this.dataParse, k)) return this.dataParse[k];
+      }
+      if (typeof code === 'string' && code.length === 1) {
+        const k = '0' + code;
+        if (Object.prototype.hasOwnProperty.call(this.dataParse, k)) return this.dataParse[k];
+      }
+      return undefined;
+    },
     createChart() {
       const parentWidget = this.$refs[this.widgetId];
 
@@ -209,18 +265,24 @@ export default {
       // Afficher uniquement les départements de la région sélectionnée
       listDep = this.getDepsFromReg(this.region);
       listDep.forEach((key) => {
-        const v = Number(this.dataParse[key] ?? this.dataParse[this.region]);
+        const v = this.toNumber(this.dataParse[key]);
         if (!isNaN(v)) values.push(v);
       });
 
       // Calcul des min et max pour l'échelle
-      if (values.length === 0) {
+      const legendCap = this.legendMaxValue !== undefined && this.legendMaxValue !== null && !isNaN(Number(this.legendMaxValue)) ? Number(this.legendMaxValue) : undefined;
+      const anyAboveCap = legendCap !== undefined && values.some(v => v > legendCap);
+      const cappedValues = legendCap !== undefined ? values.map(v => Math.min(v, legendCap)) : values.slice();
+      if (cappedValues.length === 0) {
         this.scaleMin = 0;
         this.scaleMax = 1;
       } else {
-        this.scaleMin = Math.min(...values);
-        this.scaleMax = Math.max(...values);
+        this.scaleMin = Math.min(...cappedValues);
+        this.scaleMax = Math.max(...cappedValues);
       }
+      this.InfoProps.maxLabel = anyAboveCap && legendCap !== undefined ? `> ${legendCap}` : String(this.scaleMax);
+      this.InfoProps.legendCap = legendCap;
+      this.InfoProps.anyAboveCap = anyAboveCap;
 
       // Define color scale based on regional values (interpolation RGB pour éviter les couleurs invalides)
       const colorScale = d3
@@ -253,8 +315,14 @@ export default {
           if (listDep.includes(key)) {
             const polygon = elCol[0].getBBox();
             if (elCol.length !== 0) {
-              const val = Number(this.dataParse[key] ?? this.dataParse[this.region]);
-              elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+              const raw = this.getValueForKey(key);
+              const num = this.toNumber(raw);
+              if (raw == null || isNaN(num)) {
+                elCol[0].setAttribute('fill', '#9e9e9e');
+              } else {
+                const val = legendCap !== undefined ? Math.min(num, legendCap) : num;
+                elCol[0].setAttribute('fill', colorScale(val));
+              }
             }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
@@ -266,8 +334,14 @@ export default {
           if (this.zoomDep === key) {
             const polygon = elCol[0].getBBox();
             if (elCol.length !== 0) {
-              const val = Number(this.dataParse[key] ?? this.dataParse[this.region]);
-              elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+              const raw = this.getValueForKey(key);
+              const num = this.toNumber(raw);
+              if (raw == null || isNaN(num)) {
+                elCol[0].setAttribute('fill', '#9e9e9e');
+              } else {
+                const val = legendCap !== undefined ? Math.min(num, legendCap) : num;
+                elCol[0].setAttribute('fill', colorScale(val));
+              }
             }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
@@ -277,9 +351,16 @@ export default {
           } else if (listDep.includes(key)) {
             const polygon = elCol[0].getBBox();
             if (elCol.length !== 0) {
-              // Opacité sur la couleur minimale pour les départements non sélectionnés
-              elCol[0].setAttribute('fill', this.colorLeft);
-              elCol[0].style.opacity = '0.7';
+              // Non-selected deps: if no data, gray; else muted min color
+              const raw = this.getValueForKey(key);
+              const num = this.toNumber(raw);
+              if (raw == null || isNaN(num)) {
+                elCol[0].setAttribute('fill', '#9e9e9e');
+                elCol[0].style.opacity = '1';
+              } else {
+                elCol[0].setAttribute('fill', this.colorLeft);
+                elCol[0].style.opacity = '0.7';
+              }
             }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
@@ -303,17 +384,42 @@ export default {
       }
 
       this.InfoProps.localisation = this.getReg(this.region).department;
-      this.InfoProps.value = this.value;
+      // Region headline shows RAW selected region value when available
       // Valeur du département sélectionné (si disponible), sinon valeur régionale
-      const selectedVal = Number(this.dataParse[this.zoomDep] ?? this.dataParse[this.region]);
-      this.InfoProps.valueReg = isNaN(selectedVal) ? 0 : selectedVal;
+      const rawSelected = this.toNumber(this.getValueForKey(this.zoomDep) ?? this.dataParse[this.region]);
+      this.InfoProps.value = isNaN(rawSelected) ? `${this.prefix}${this.value}${this.suffix}` : `${this.prefix}${rawSelected}${this.suffix}`;
+      this.InfoProps.valueReg = isNaN(rawSelected) ? 0 : rawSelected;
       this.InfoProps.min = this.scaleMin;
       this.InfoProps.max = this.scaleMax;
       this.InfoProps.noMapInfo = this.noMapInfo;
+      this.InfoProps.selectedValueRaw = isNaN(rawSelected) ? undefined : rawSelected;
+      this.InfoProps.selectedValueCapped = isNaN(rawSelected)
+        ? undefined
+        : (legendCap !== undefined ? Math.min(rawSelected, legendCap) : rawSelected);
+      // Détermination précise: toutes les dépendances (départements) de la région doivent être présentes et valides
+      const expectedCodes = listDep;
+      const hasNoData = expectedCodes.some(code => {
+        const raw = this.getValueForKey(code);
+        return raw === undefined || raw === null || isNaN(this.toNumber(raw));
+      });
+      this.InfoProps.hasNoData = hasNoData;
+      this.InfoProps.noDataColor = '#9e9e9e';
+      this.InfoProps.prefix = this.prefix;
+      this.InfoProps.suffix = this.suffix;
     },
     choosePalette() {
       // Using the refactored choosePalette function from utils
-      return choosePalette(this.selectedPalette, this.colors);
+      return choosePalette(this.currentPalette || this.selectedPalette, this.colors);
+    },
+    toggleAccessibility() {
+      const p = this.currentPalette || this.selectedPalette || '';
+      let next = p;
+      if (p === 'divergentAscending') next = 'sequentialAscending';
+      else if (p === 'divergentDescending') next = 'sequentialDescending';
+      else if (p === 'sequentialAscending') next = 'divergentAscending';
+      else if (p === 'sequentialDescending') next = 'divergentDescending';
+      this.currentPalette = next;
+      this.createChart();
     },
     displayTooltip(e) {
       if (isMobile()) return;
@@ -322,8 +428,15 @@ export default {
       const hoverValue = hoverElement.replace('FR-', '');
 
       const elCol = parentWidget.getElementsByClassName(hoverElement);
+      const raw = this.getValueForKey(hoverValue);
+      const num = this.toNumber(raw);
+      if (raw == null || isNaN(num)) {
+        this.tooltip.visibility = 'hidden';
+        return;
+      }
       elCol[0].style.opacity = 0.8;
-      this.tooltip.value = this.dataParse[hoverValue];
+      // Hover displays RAW value (not capped)
+      this.tooltip.value = `${this.prefix}${num}${this.suffix}`;
       this.tooltip.place = this.getDep(hoverValue).department;
 
       const franceRect = parentWidget.querySelector('.france_container').getBoundingClientRect();
@@ -355,6 +468,12 @@ export default {
     changeGeoLevel(e) {
       // Get clicked department value
       const hoverValue = e.target.className.baseVal.replace('FR-', '');
+      const raw = this.getValueForKey(hoverValue);
+      const num = this.toNumber(raw);
+      if (raw == null || isNaN(num)) {
+        // Prevent selecting areas without data
+        return;
+      }
       this.zoomDep = hoverValue;
       this.createChart();
     },

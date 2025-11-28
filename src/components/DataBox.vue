@@ -10,41 +10,25 @@
       </h3>
 
       <div :class="'flex screenshot-hide-' + id">
-        <!-- Tooltip -->
+        <!-- Info Modal (replaces tooltip) -->
         <button
-          class="fr-btn--tooltip fr-btn"
+          v-if="tooltipTitle || tooltipContent"
           type="button"
-          :aria-describedby="'tooltip-' + id"
+          class="fr-btn fr-btn--sm fr-icon-information-line fr-btn--tertiary-no-outline fr-ratio-1x1"
+          data-fr-opened="false"
+          :aria-controls="'modal-' + ('tooltip-' + id)"
           title="Informations complémentaires sur le graphique"
-          @click="toggleTooltip"
-        >
-          Informations complémentaires sur le graphique
-        </button>
+        />
 
         <Teleport
           v-if="tooltipTitle || tooltipContent"
           to="body"
         >
-          <div
-            v-if="tooltipTitle || tooltipContent"
+          <DialogModal
             :id="'tooltip-' + id"
-            class="fr-tooltip fr-placement"
-            role="tooltip"
-            aria-hidden="true"
-          >
-            <p
-              v-if="tooltipTitle"
-              class="fr-text--xs fr-mb-0 fr-text--bold"
-            >
-              {{ tooltipTitle }}
-            </p>
-            <p
-              v-if="tooltipContent"
-              class="fr-text--xs fr-mb-0"
-            >
-              {{ tooltipContent }}
-            </p>
-          </div>
+            :modal-title="tooltipTitle || 'Informations'"
+            :modal-content="tooltipContent || ''"
+          />
         </Teleport>
 
         <!-- Modal -->
@@ -99,7 +83,7 @@
                   <button
                     class="fr-translate__language fr-nav__link"
                     title="Télécharger les données en CSV"
-                    @click="downloadCSV(selectedView)"
+                    @click="downloadCSV('table')"
                   >
                     Télécharger en CSV
                   </button>
@@ -292,7 +276,7 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref } from 'vue';
 import { toPng } from 'html-to-image';
 import { slugify } from '@/utils/global.js';
 import DialogModal from '@/components/DialogModal.vue';
@@ -390,62 +374,10 @@ const actions = computed(() => (typeof props.actions === 'string' ? JSON.parse(p
 
 const selectedView = ref(chartSources.value.length > 0 ? 'chart' : 'table');
 
-const tooltipState = ref('deactivate');
-
 const changeView = (view) => {
   selectedView.value = view;
 };
-
-const toggleTooltip = (event) => {
-  event.stopPropagation();
-
-  if (tooltipState.value === 'activate') {
-    tooltipState.value = 'deactivate';
-    // Safely remove all fr-tooltip--shown classes
-    try {
-      const tooltips = document.querySelectorAll('.fr-tooltip--shown');
-      tooltips.forEach((tooltip) => {
-        tooltip.classList.remove('fr-tooltip--shown');
-      });
-    } catch (error) {
-      console.warn('Error removing tooltip classes:', error);
-    }
-  } else {
-    tooltipState.value = 'activate';
-    // Show the clicked tooltip
-    try {
-      const tooltip = document.getElementById('tooltip-' + props.id);
-      if (tooltip) {
-        tooltip.classList.add('fr-tooltip--shown');
-      }
-    } catch (error) {
-      console.warn('Error showing tooltip:', error);
-    }
-  }
-};
-
-const deactivateTooltips = () => {
-  tooltipState.value = 'deactivate';
-  // Safely remove all fr-tooltip--shown classes
-  try {
-    const tooltips = document.querySelectorAll('.fr-tooltip--shown');
-    tooltips.forEach((tooltip) => {
-      tooltip.classList.remove('fr-tooltip--shown');
-    });
-  } catch (error) {
-    console.warn('Error removing tooltip classes:', error);
-  }
-};
-
-onMounted(() => {
-  // Add global click listener to deactivate tooltips when clicking anywhere
-  document.addEventListener('click', deactivateTooltips);
-});
-
-onUnmounted(() => {
-  // Cleanup: remove global click listener
-  document.removeEventListener('click', deactivateTooltips);
-});
+// Tooltip replaced by modal: remove tooltip state and listeners
 
 const downloadCSV = (mode) => {
   const dom = document.querySelector(`[databox-id="${props.id}"][databox-type="${mode}"][databox-source="${currentSource.value}"]`);

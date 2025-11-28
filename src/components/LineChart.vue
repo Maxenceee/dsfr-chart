@@ -249,6 +249,18 @@ export default {
       type: String,
       default: ''
     },
+    xCalendarWeeksToMonths: {
+      type: Boolean,
+      default: false,
+    },
+    xAxisTitle: {
+      type: String,
+      default: '',
+    },
+    yAxisTitle: {
+      type: String,
+      default: '',
+    },
   },
   data() {
     this.chart = undefined;
@@ -309,6 +321,29 @@ export default {
     });
   },
   methods: {
+    weekToMonthLabelFr(week) {
+      const w = Math.max(1, Math.min(53, Number(week) || 1));
+      const wNormalized = ((w - 1) * 12) / 52;
+      const idx = Math.min(11, Math.floor(wNormalized));
+      const frac = wNormalized - idx;
+      const partNames = ['Début', 'Mi', 'Fin'];
+      const part = partNames[Math.min(2, Math.floor(frac * 3))];
+      const months = [
+      'Janvier',
+      'Février',
+      'Mars',
+      'Avril',
+      'Mai',
+      'Juin',
+      'Juillet',
+      'Août',
+      'Septembre',
+      'Octobre',
+      'Novembre',
+      'Décembre',
+      ];
+      return `${part} ${months[idx]}`;
+    },
     resetData() {
       if (this.chart) {
         this.chart.destroy();
@@ -565,6 +600,10 @@ export default {
               grid: {
                 drawOnChartArea: false,
               },
+              title: {
+                display: !!this.xAxisTitle,
+                text: this.xAxisTitle,
+              },
               ticks: {
                 padding: 10,
               },
@@ -577,6 +616,10 @@ export default {
               },
               border: {
                 dash: [3],
+              },
+              title: {
+                display: !!this.yAxisTitle,
+                text: this.yAxisTitle,
               },
               ticks: {
                 padding: 5,
@@ -611,6 +654,20 @@ export default {
                   return label;
                 },
                 title: (tooltipItems) => {
+                  if (this.xCalendarWeeksToMonths) {
+                    if (this.xAxisType === 'linear') {
+                      const w = Math.round(tooltipItems[0].parsed.x);
+                      return `${this.weekToMonthLabelFr(w)} (semaine ${w})`;
+                    } else {
+                      const idx = tooltipItems[0].dataIndex;
+                      const w = Array.isArray(this.xparse) && Array.isArray(this.xparse[0]) ? this.xparse[0][idx] : undefined;
+                      if (typeof w === 'number') {
+                        const ww = Math.round(w);
+                        return `${this.weekToMonthLabelFr(ww)} (semaine ${ww})`;
+                      }
+                      return tooltipItems[0].label;
+                    }
+                  }
                   return tooltipItems[0].label;
                 },
                 labelTextColor: () => {

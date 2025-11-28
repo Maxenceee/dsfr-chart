@@ -8,14 +8,20 @@
       :ref="widgetId"
       class="widget_container fr-grid-row"
     >
-      <MapInfo :data="InfoProps" />
+      <MapInfo
+        :data="InfoProps"
+        :legend-alt="legendAlt"
+        :selected-palette="selectedPalette"
+        :current-palette="currentPalette"
+        @toggle-accessibility="toggleAccessibility"
+      />
       <div class="fr-col-12 fr-col-lg-9 align-stretch">
         <button
           v-if="zoomDep"
-          class="fr-btn fr-btn--sm fr-icon-arrow-go-back-fill fr-btn--icon-left fr-btn--tertiary-no-outline fr-ml-4w"
+          class="fr-btn fr-btn--sm fr-icon-close-line fr-btn--icon-left fr-btn--tertiary-no-outline fr-ml-4w"
           @click="resetGeoFilters"
         >
-          Retour
+          Déselectionner
         </button>
         <div class="map">
           <div
@@ -239,6 +245,22 @@ export default {
       type: Boolean,
       default: false,
     },
+    legendMaxValue: {
+      type: [Number, String],
+      default: undefined,
+    },
+    prefix: {
+      type: String,
+      default: '',
+    },
+    suffix: {
+      type: String,
+      default: '',
+    },
+    legendAlt: {
+      type: String,
+      default: 'Légende',
+    },
   },
   data() {
     return {
@@ -248,6 +270,7 @@ export default {
       scaleMax: 0,
       colorLeft: '',
       colorRight: '',
+      currentPalette: this.selectedPalette,
       isDep: true,
       isReg: false,
       isAcad: false,
@@ -257,14 +280,23 @@ export default {
         names: [],
         min: 0,
         max: 0,
+        maxLabel: '',
+        legendCap: undefined,
+        anyAboveCap: false,
         colorMin: '',
         colorMax: '',
         value: 0,
         valueNat: 0,
         valueReg: 0,
+        selectedValueRaw: undefined,
+        selectedValueCapped: undefined,
         date: '',
         noMapInfo: false,
         minimalMapInfo: false,
+        hasNoData: false,
+        noDataColor: '#9e9e9e',
+        prefix: '',
+        suffix: '',
       },
       FranceProps: {
         viewBox: '0 0 1010 1010',
@@ -278,7 +310,7 @@ export default {
         top: '0px',
         left: '0px',
         visibility: 'hidden',
-        value: 0,
+        value: '',
         place: '',
       },
       displayFrance: '',
@@ -295,6 +327,10 @@ export default {
       handler() {
         // Check if the widget is already created to prevent useless re-renders
         if (this.widgetId) {
+          // sync internal palette if prop changed from outside
+          if (this.currentPalette !== this.selectedPalette) {
+            this.currentPalette = this.selectedPalette;
+          }
           this.createChart();
         }
       },
@@ -319,6 +355,29 @@ export default {
     });
   },
   methods: {
+    toNumber(val) {
+      if (val === null || val === undefined) return NaN;
+      if (typeof val === 'number') return val;
+      if (typeof val !== 'string') return Number(val);
+      const s = val.replace(/\s+/g, '').replace(',', '.');
+      const n = parseFloat(s);
+      return isNaN(n) ? NaN : n;
+    },
+    getValueForKey(code) {
+      // Try exact code
+      if (Object.prototype.hasOwnProperty.call(this.dataParse, code)) return this.dataParse[code];
+      // Try without leading zero
+      if (typeof code === 'string' && code.length === 2 && code.startsWith('0')) {
+        const k = code.slice(1);
+        if (Object.prototype.hasOwnProperty.call(this.dataParse, k)) return this.dataParse[k];
+      }
+      // Try with leading zero for 1-digit departments
+      if (typeof code === 'string' && code.length === 1) {
+        const k = ('0' + code);
+        if (Object.prototype.hasOwnProperty.call(this.dataParse, k)) return this.dataParse[k];
+      }
+      return undefined;
+    },
     createChart() {
       const parentWidget = this.$refs[this.widgetId];
 
@@ -363,7 +422,12 @@ export default {
       }
 
       // Calcul des min et max pour l'échelle
-      const validValues = values.filter(v => v != null && !isNaN(Number(v)));
+      const validValuesRaw = values.filter(v => v != null && !isNaN(this.toNumber(v)));
+      const legendCap = this.legendMaxValue !== undefined && this.legendMaxValue !== null && !isNaN(Number(this.legendMaxValue)) ? Number(this.legendMaxValue) : undefined;
+      const validValues = legendCap !== undefined
+        ? validValuesRaw.map(v => Math.min(this.toNumber(v), legendCap))
+        : validValuesRaw.map(v => this.toNumber(v));
+      const anyAboveCap = legendCap !== undefined && validValuesRaw.some(v => this.toNumber(v) > legendCap);
       if (validValues.length === 0) {
         this.scaleMin = 0;
         this.scaleMax = 1;
@@ -371,6 +435,9 @@ export default {
         this.scaleMin = Math.min(...validValues);
         this.scaleMax = Math.max(...validValues);
       }
+      this.InfoProps.maxLabel = anyAboveCap && legendCap !== undefined ? `> ${legendCap}` : String(this.scaleMax);
+      this.InfoProps.legendCap = legendCap;
+      this.InfoProps.anyAboveCap = anyAboveCap;
 
       // Define color scale based on regional values (interpolation RGB pour éviter les couleurs invalides)
       const colorScale = d3
@@ -384,46 +451,60 @@ export default {
         ymin = [],
         ymax = [];
 
-      // Iterate over each department in France and set colors
-      for (const key in this.dataParse) {
-        const className = 'FR-' + key;
+      // Coloration: distinguer dataset départemental vs régional
+      const expectedFull = this.getAllDep ? this.getAllDep() : [];
+      const expectedRegions = this.getAllReg ? [...new Set(this.getAllReg())] : [];
+      const isDepDataset = this.level === 'dep';
+      // Pour les régions, on boucle sur la liste complète des codes région (uniques) afin de griser celles réellement sans données
+      const iterationCodes = isDepDataset ? expectedFull : expectedRegions;
+      iterationCodes.forEach(code => {
+        const className = 'FR-' + code;
         const elCol = parentWidget.getElementsByClassName(className);
-
+        if (elCol.length === 0) return; // SVG path missing
         if (!this.zoomDep) {
-          if (elCol.length !== 0) {
-            const val = Number(this.dataParse[key]);
-            elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+          const raw = this.getValueForKey(code);
+          const num = this.toNumber(raw);
+          if (raw == null || isNaN(num)) {
+            elCol[0].setAttribute('fill', '#9e9e9e');
+          } else {
+            const val = legendCap !== undefined ? Math.min(num, legendCap) : num;
+            elCol[0].setAttribute('fill', colorScale(val));
           }
           this.FranceProps.displayDep[className] = '';
         } else {
-          // Vérifier que l'élément existe dans le DOM avant de récupérer getBBox
-          if (elCol.length === 0) {
-            continue;
-          }
-
+          const raw = this.getValueForKey(code);
+          const num = this.toNumber(raw);
           const polygon = elCol[0].getBBox();
-          if (this.zoomDep === key) {
-            const val = Number(this.dataParse[key]);
-            elCol[0].setAttribute('fill', colorScale(isNaN(val) ? this.scaleMin : val));
+          if (this.zoomDep === code) {
+            if (raw == null || isNaN(num)) {
+              elCol[0].setAttribute('fill', '#9e9e9e');
+            } else {
+              const val = legendCap !== undefined ? Math.min(num, legendCap) : num;
+              elCol[0].setAttribute('fill', colorScale(val));
+            }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
             xmax.push(polygon.x + polygon.width);
             ymax.push(polygon.y + polygon.height);
-          } else if (listDep.includes(key)) {
-            elCol[0].setAttribute('fill', this.colorLeft + 'B3');
+          } else if (listDep.includes(code)) {
+            if (raw == null || isNaN(num)) {
+              elCol[0].setAttribute('fill', '#9e9e9e');
+            } else {
+              elCol[0].setAttribute('fill', this.colorLeft + 'B3');
+            }
             this.FranceProps.displayDep[className] = '';
             xmin.push(polygon.x);
             ymin.push(polygon.y);
             xmax.push(polygon.x + polygon.width);
             ymax.push(polygon.y + polygon.height);
           } else {
-            // Hide other departments outside the selected region
+            // Outside region: hide
             elCol[0].setAttribute('fill', 'rgba(255, 255, 255, 0)');
             this.FranceProps.displayDep[className] = 'none';
           }
         }
-      }
+      });
 
       if (this.zoomDep) {
         // Logic for zoom level and dimensions adjustment
@@ -442,16 +523,21 @@ export default {
         } else if (this.isAcad) {
           this.InfoProps.localisation = this.getAcad(this.zoomDep).academy;
         }
-        this.InfoProps.value = this.value;
-        const selectedVal = Number(this.dataParse[this.zoomDep]);
+        // Selected area values (use RAW for display, capped only for color)
+        const rawSelected = this.toNumber(this.getValueForKey(this.zoomDep));
+        this.InfoProps.value = isNaN(rawSelected) ? `${this.prefix}${this.value}${this.suffix}` : `${this.prefix}${rawSelected}${this.suffix}`;
         // Utiliser valueReg pour les régions, valueNat pour les départements
         if (this.isReg) {
-          this.InfoProps.valueReg = isNaN(selectedVal) ? 0 : selectedVal;
+          this.InfoProps.valueReg = isNaN(rawSelected) ? 0 : rawSelected;
           this.InfoProps.valueNat = 0;
         } else {
-          this.InfoProps.valueNat = isNaN(selectedVal) ? 0 : selectedVal;
+          this.InfoProps.valueNat = isNaN(rawSelected) ? 0 : rawSelected;
           this.InfoProps.valueReg = 0;
         }
+        this.InfoProps.selectedValueRaw = isNaN(rawSelected) ? undefined : rawSelected;
+        this.InfoProps.selectedValueCapped = isNaN(rawSelected)
+          ? undefined
+          : (legendCap !== undefined ? Math.min(rawSelected, legendCap) : rawSelected);
 
         if (this.isDep) {
           this.displayFrance = 'none';
@@ -477,9 +563,11 @@ export default {
         }
       } else {
         this.InfoProps.localisation = 'France';
-        this.InfoProps.value = this.value;
+        this.InfoProps.value = `${this.prefix}${this.value}${this.suffix}`;
         this.InfoProps.valueNat = 0;
         this.InfoProps.valueReg = 0;
+        this.InfoProps.selectedValueRaw = undefined;
+        this.InfoProps.selectedValueCapped = undefined;
         this.FranceProps.viewBox = '0 0 1010 1010';
         this.displayFrance = '';
         this.displayGuadeloupe = '';
@@ -496,6 +584,21 @@ export default {
       this.InfoProps.colorMax = this.colorRight;
       this.InfoProps.noMapInfo = this.noMapInfo;
       this.InfoProps.minimalMapInfo = this.minimalMapInfo;
+      // Détermination précise des zones sans données: comparer aux codes attendus selon le niveau
+      let expectedCodes = [];
+      if (this.level === 'dep') {
+        expectedCodes = this.getAllDep ? this.getAllDep() : [];
+      } else if (this.level === 'reg') {
+        expectedCodes = this.getAllReg ? [...new Set(this.getAllReg())] : [];
+      }
+      const hasNoData = expectedCodes.some(code => {
+        const raw = this.getValueForKey(code);
+        return raw === undefined || raw === null || isNaN(this.toNumber(raw));
+      });
+      this.InfoProps.hasNoData = hasNoData;
+      this.InfoProps.noDataColor = '#9e9e9e';
+      this.InfoProps.prefix = this.prefix;
+      this.InfoProps.suffix = this.suffix;
     },
     displayTooltip(e) {
       if (isMobile()) return;
@@ -504,8 +607,16 @@ export default {
       const hoverValue = hoverElement.replace('FR-', '');
 
       const elCol = parentWidget.getElementsByClassName(hoverElement);
+      const raw = this.getValueForKey(hoverValue);
+      const num = this.toNumber(raw);
+      if (raw == null || isNaN(num)) {
+        // No data: do not hover
+        this.tooltip.visibility = 'hidden';
+        return;
+      }
       elCol[0].style.opacity = 0.8;
-      this.tooltip.value = this.dataParse[hoverValue];
+      // Hover displays RAW value (not capped)
+      this.tooltip.value = `${this.prefix}${num}${this.suffix}`;
       if (this.isDep) {
         this.tooltip.place = this.getDep(hoverValue).department;
       } else if (this.isReg) {
@@ -543,6 +654,12 @@ export default {
     changeGeoLevel(e) {
       // Get clicked department value
       const hoverValue = e.target.className.baseVal.replace('FR-', '');
+      const raw = this.getValueForKey(hoverValue);
+      const num = this.toNumber(raw);
+      if (raw == null || isNaN(num)) {
+        // Prevent selecting areas without data
+        return;
+      }
       this.zoomDep = hoverValue;
       this.createChart();
     },
@@ -552,7 +669,17 @@ export default {
     },
     choosePalette() {
       // Using the refactored choosePalette function from utils
-      return choosePalette(this.selectedPalette, this.colors);
+      return choosePalette(this.currentPalette || this.selectedPalette, this.colors);
+    },
+    toggleAccessibility() {
+      const p = this.currentPalette || this.selectedPalette || '';
+      let next = p;
+      if (p === 'divergentAscending') next = 'sequentialAscending';
+      else if (p === 'divergentDescending') next = 'sequentialDescending';
+      else if (p === 'sequentialAscending') next = 'divergentAscending';
+      else if (p === 'sequentialDescending') next = 'divergentDescending';
+      this.currentPalette = next;
+      this.createChart();
     },
     changeTheme(theme) {
       if (theme === 'light') {
