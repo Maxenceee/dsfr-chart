@@ -715,8 +715,11 @@ export default {
 
                   // Iterate over bodyLines to set the color and value in the tooltip
                   bodyLines[0].forEach((line, i) => {
-                    const displayValue = `${line}${this.unitTooltip ? ' ' + this.unitTooltip : ''}`;
-                    if (line) {
+                    if (line !== undefined && line !== null && line !== '') {
+                      const numeric = Number(line);
+                      const formatted = isNaN(numeric) ? String(line) : this.formatNumber(numeric);
+                      const seriesName = this.nameParse && this.nameParse[i] ? this.capitalize(this.nameParse[i]) : `Série ${i + 1}`;
+                      const displayValue = `${seriesName}: ${formatted}${this.unitTooltip ? ' ' + this.unitTooltip : ''}`;
                       divValue.innerHTML += `
                         <div class="tooltip_value-content">
                           <span class="tooltip_dot" style="background-color:${this.colorParse[i]};"></span>
