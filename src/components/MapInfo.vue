@@ -90,9 +90,14 @@
       >
         <span
           class="na_bar"
-          :style="{ background: data['noDataColor'] }"
+          :style="{ background: data['noDataColor'], width: '1.5rem', height: '1.5rem', display: 'inline-block', verticalAlign: 'middle', border: 'none' }"
         />
-        <span class="na_label fr-text--xs">Pas de données</span>
+        <span
+          class="na_label fr-text--xs"
+          :style="{ display: 'inline-flex', alignItems: 'center', height: '1.5rem', lineHeight: '1.5rem', margin: '0 0 0 0.5rem', verticalAlign: 'middle', whiteSpace: 'nowrap' }"
+        >
+          Pas de données
+        </span>
       </div>
       <div
         v-if="isPaletteToggleEligible"
@@ -224,7 +229,6 @@ function onToggleAccessibility() {
 .na_bar {
   width: 1.5rem; /* same size as scale height for a square */
   height: 100%;
-  border: 1px solid rgba(0,0,0,0.2);
   flex: 0 0 1.5rem;
 }
 .na_label {

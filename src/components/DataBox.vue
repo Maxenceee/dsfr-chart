@@ -5,9 +5,18 @@
   >
     <!-- Header -->
     <div class="fr-p-2w databox__header">
-      <h3 class="fr-h6 fr-mb-0">
-        {{ databoxTitle }}
-      </h3>
+      <div>
+        <h3 class="fr-h6 fr-mb-0">
+          {{ databoxTitle }}
+        </h3>
+        <p
+          v-if="databoxSubtitle"
+          class="fr-text--sm fr-mb-0 fr-mt-1v"
+          style="font-weight: normal;"
+        >
+          {{ databoxSubtitle }}
+        </p>
+      </div>
 
       <div :class="'flex screenshot-hide-' + id">
         <!-- Info Modal (replaces tooltip) -->
@@ -289,6 +298,10 @@ const props = defineProps({
   databoxTitle: {
     type: String,
     required: true,
+  },
+  databoxSubtitle: {
+    type: String,
+    default: '',
   },
   tooltipTitle: {
     type: String,

@@ -43,7 +43,7 @@
             :style="{ maxHeight: maxHeight || undefined, flexShrink: maxHeight ? 1 : undefined }"
           />
 
-          <div class="chart_legend fr-mb-0 fr-mt-4v">
+          <div class="chart_legend fr-mb-0">
             <div
               v-for="(item, index) in nameParse"
               :key="index"
