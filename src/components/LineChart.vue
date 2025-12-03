@@ -204,6 +204,10 @@ export default {
       type: Array,
       default: undefined,
     },
+    bolder: {
+      type: Array,
+      default: () => [],
+    },
     unitTooltip: {
       type: String,
       default: '',
@@ -286,6 +290,7 @@ export default {
       hlineColorParse: [],
       tmpHlineColorParse: [],
       hlineNameParse: [],
+      bolderParse: [],
       colorHover: [],
     };
   },
@@ -398,6 +403,18 @@ export default {
       } catch (error) {
         console.error('Erreur lors du parsing des données showLabels:', error);
         return;
+      }
+
+      // Parsing de la prop bolder (array de booléens ou de nombres)
+      try {
+        this.bolderParse =
+          typeof this.bolder === 'string' ? JSON.parse(this.bolder) : (Array.isArray(this.bolder) ? this.bolder : []);
+        if (!Array.isArray(this.bolderParse)) {
+          throw new Error("La prop 'bolder' doit être une liste.");
+        }
+      } catch (error) {
+        console.error('Erreur lors du parsing de bolder:', error);
+        this.bolderParse = [];
       }
 
       let tmpNameParse = [];
@@ -514,7 +531,12 @@ export default {
         pointBorderColor: this.colorParse[index % this.colorParse.length],
         pointHoverBackgroundColor: this.colorHover[index % this.colorHover.length],
         pointHoverBorderColor: this.colorHover[index % this.colorHover.length],
-        borderWidth: 2,
+        borderWidth: (() => {
+          const v = this.bolderParse[index];
+          if (typeof v === 'number' && isFinite(v)) return Math.max(1, v);
+          if (v) return 4; // booléen true
+          return 2;
+        })(),
         tension: 0.4,
       }));
     },
