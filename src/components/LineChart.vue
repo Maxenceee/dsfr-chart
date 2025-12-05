@@ -486,8 +486,17 @@ export default {
 
         // Si forceXOrder est activé, on utilise le mode 'category' pour préserver l'ordre
         if (this.forceXOrder) {
-          // Convertir les valeurs numériques en labels de catégories
-          this.labels = this.xparse[0].map(x => String(x));
+          // Choisir le x le plus complet (longueur max) pour servir de référence
+          let refIdx = 0;
+          let refLen = Array.isArray(this.xparse[0]) ? this.xparse[0].length : 0;
+          for (let i = 1; i < this.xparse.length; i++) {
+            const len = Array.isArray(this.xparse[i]) ? this.xparse[i].length : 0;
+            if (len > refLen) {
+              refLen = len;
+              refIdx = i;
+            }
+          }
+          this.labels = this.xparse[refIdx].map((x) => String(x));
           data = this.yparse;
           this.xAxisType = 'category';
         } else {
