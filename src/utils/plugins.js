@@ -14,7 +14,7 @@ export const plugins = {
       ]
      * ```
      */
-    afterDraw_2D: (dataset1, dataset2) => function(chart) {
+    afterDraw_2D: (dataset1, dataset2) => (function(chart) {
       if (chart.tooltip?._active && chart.tooltip?._active.length) {
         const { ctx } = chart;
         const x = chart.tooltip.getActiveElements()[0].element.tooltipPosition().x;
@@ -56,7 +56,7 @@ export const plugins = {
         ctx.stroke();
         ctx.restore();
       }
-    },
+    }),
     /**
      * This function needs to access the chart context (this) to get the props values,
      * it must be bound to the component instance, to be used as a plugin.
@@ -71,7 +71,7 @@ export const plugins = {
       ]
      * ```
      */
-    afterDraw_1D: (dataset1) => function(chart) {
+    afterDraw_1D: (dataset1) => (function(chart) {
       if (chart.tooltip?._active && chart.tooltip?._active.length) {
         const { ctx } = chart;
         const x = chart.tooltip.getActiveElements()[0].element.tooltipPosition().x;
@@ -100,7 +100,7 @@ export const plugins = {
           ctx.restore();
         });
       }
-    },
+    }),
   },
   pointLabels: {
     /**
@@ -117,7 +117,7 @@ export const plugins = {
       ]
      * ```
      */
-    afterDatasetsDraw: (indexesWithLabels) => function(chart) {
+    afterDatasetsDraw: (indexesWithLabels) => (function(chart) {
       const { ctx, chartArea } = chart;
       const drawnBoxes = [];
       const padding = 2; // marge intérieure minimale avec le bord du chart
@@ -181,7 +181,7 @@ export const plugins = {
           drawnBoxes.push(adjustedBox);
         });
       });
-    },
+    }),
   },
   highlightZone: {
     /**
